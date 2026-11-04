@@ -24,17 +24,18 @@ Visitors can browse and access published resources without creating an account. 
 
 > Product principle: Google Drive is an import/source channel. L-E-COURS is the organized catalogue students use every day.
 
-## 🚀 Highlights in v1.5
+## 🚀 Highlights in v1.6 (implementation in progress)
 
 ### Public learning experience
 - Public library with no mandatory registration.
 - Arabic RTL interface with Light, Dark and System appearance modes.
-- Browse content by **Filière → Level → Subject → Course → Files**.
+- Browse content by **StudyYear → Filiere → Speciality → Subject → ResourceCategory → Files**.
 - The folder structure imported from Drive is mapped automatically:
-  - First folder level → Filière (الشعبة)
-  - Second folder level → Level (المستوى)
-  - Third folder level → Subject (المادة)
-  - Fourth folder level → Course (الدرس)
+  - First folder level → StudyYear (السنة الدراسية)
+  - Second folder level → Filiere (الشعبة)
+  - Third folder level → Speciality (التخصص)
+  - Fourth folder level → Subject (المادة)
+  - Fifth folder level → ResourceCategory (Cours / TD / Examens / Autres)
 - Global file-name search across published sources.
 - Device-local favourites; no account is required.
 - In-app PDF reader for uploaded PDFs, with browser-native zoom, page navigation and print controls.
@@ -69,10 +70,14 @@ Visitors can browse and access published resources without creating an account. 
 
 ```text
 Google Drive shared folder
-└── Filière / الشعبة
-    └── Level / المستوى
-        └── Subject / المادة
-            └── Course / الدرس
+└── StudyYear / السنة الدراسية
+    └── Filiere / الشعبة
+        └── Speciality / التخصص
+            └── Subject / المادة
+                ├── Cours
+                ├── TD
+                ├── Examens
+                └── Autres
                 ├── PDF notes
                 ├── Exercises
                 ├── Exams
@@ -160,7 +165,7 @@ Open `http://localhost:5173`.
 
 ### 3. Upgrade from v1.3
 
-Back up your database and uploaded media first, then replace the project files with v1.4 and run:
+Back up your database and uploaded media first, then replace the project files with v1.6 and run:
 
 ```powershell
 cd backend
@@ -169,7 +174,7 @@ pip install -r requirements.txt
 python manage.py migrate
 ```
 
-The new migration creates the academic catalogue tables. Run a Drive sync for each existing source to populate the Filière / Level / Subject / Course mapping from its folder tree.
+Migration 0004 renames the existing academic entities in place, adds resource categories, and assigns existing files where their folder placement allows it. Review the imported structure in Django Admin before publishing.
 
 ## 🔗 Connect Google Drive
 
@@ -187,7 +192,7 @@ GOOGLE_DRIVE_API_KEY=your_google_drive_api_key
 7. Sign in at `/#admin`, open **ربط Google Drive**, enter the shared folder URL and start the import.
 8. Run Sync again whenever you want to refresh the catalogue.
 
-The linked Drive folder is treated as a container. Its immediate child folders become the public Filières. Nested folders are mapped to the academic levels shown above.
+The linked Drive folder is treated as a container. Its immediate child folders become StudyYears. The next four folder levels map to Filiere, Speciality, Subject and ResourceCategory. Category names are detected in Arabic, French and English; unrecognized names are assigned to Autres.
 
 ### Import limits
 
@@ -244,13 +249,14 @@ All endpoints are prefixed with `/api/`.
 | GET | `/sources/` | Public | List published Drive sources |
 | GET | `/folders/?source=ID&parent=null` | Public | List root folders or children |
 | GET | `/files/?source=ID&folder=ID` | Public | List published files |
-| GET | `/academic/` | Public | Nested Filière / Level / Subject / Course catalogue |
+| GET | `/academic/` | Public | Nested StudyYear / Filiere / Speciality / Subject / ResourceCategory catalogue |
 | GET | `/search/?q=term` | Public | Search file names across sources |
 | GET | `/dashboard/` | Public | Public library summary |
 | POST | `/auth/token/` | Public, throttled | Administrator login |
 | POST | `/auth/logout/` | Authenticated | Revoke current token |
 | POST | `/admin/drive-sources/` | Admin | Add and import a Drive folder |
 | POST | `/admin/drive-sources/{id}/sync/` | Admin | Re-sync a Drive source |
+| CRUD | `/admin/study-years/`, `/admin/filieres/`, `/admin/specialities/`, `/admin/subjects/`, `/admin/resource-categories/` | Admin | Manage academic hierarchy and categories |
 | POST | `/files/upload/` | Authenticated | Upload a file |
 | GET | `/files/{id}/download/` | Public | Access a published stored file |
 
@@ -319,3 +325,8 @@ This project currently ships without a formal license grant. Add a `LICENSE` fil
 **L-E-COURS** · منظم. واضح. متاح للجميع.
 
 </div>
+
+
+## v1.6 status
+
+The five-level catalogue and migration are implemented in source. Do not deploy until the Django migration/test suite, frontend production build, and a real Drive import have been verified in an environment with project dependencies installed.

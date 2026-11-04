@@ -13,9 +13,9 @@ class ApiSecurityTests(APITestCase):
         self.token = Token.objects.create(user=self.user)
         self.source = DriveSource.objects.create(name="drive_test", label="Test Drive")
 
-    def test_api_requires_authentication(self):
+    def test_public_catalogue_sources_do_not_require_authentication(self):
         response = self.client.get("/api/sources/")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_authenticated_user_can_list_sources(self):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {self.token.key}")
@@ -63,18 +63,30 @@ class PublicLibraryTests(APITestCase):
 
 class AcademicCatalogueTests(APITestCase):
     def test_drive_folder_tree_is_mapped_to_academic_catalogue(self):
-        from .models import Folder, Filiere, StudyLevel, Subject, Course
+        from .models import Folder, StudyYear, Filiere, Speciality, Subject, ResourceCategory
         from .drive_importer import rebuild_academic_structure
         source = DriveSource.objects.create(name="faculty", label="Faculty", is_public=True)
         root = Folder.objects.create(source=source, name="Informatique")
         level = Folder.objects.create(source=source, name="L1", parent=root)
         subject = Folder.objects.create(source=source, name="Algorithmique", parent=level)
-        course = Folder.objects.create(source=source, name="Cours 01", parent=subject)
+        course = Folder.objects.create(source=source, name="Machine Learning", parent=subject)
+        category = Folder.objects.create(source=source, name="TD", parent=course)
         rebuild_academic_structure(source)
-        self.assertEqual(Filiere.objects.get(folder=root).name, "Informatique")
-        self.assertEqual(StudyLevel.objects.get(folder=level).name, "L1")
-        self.assertEqual(Subject.objects.get(folder=subject).name, "Algorithmique")
-        self.assertEqual(Course.objects.get(folder=course).name, "Cours 01")
+        self.assertEqual(StudyYear.objects.get(folder=root).name, "Informatique")
+        self.assertEqual(Filiere.objects.get(folder=level).name, "L1")
+        self.assertEqual(Speciality.objects.get(folder=subject).name, "Algorithmique")
+        academic_subject = Subject.objects.get(folder=course)
+        self.assertEqual(academic_subject.name, "Machine Learning")
+        self.assertEqual(ResourceCategory.objects.get(folder=category).code, "td")
+
+    def test_resource_category_names_are_detected_in_three_languages(self):
+        from .drive_importer import detect_resource_category
+        self.assertEqual(detect_resource_category("Cours"), "course")
+        self.assertEqual(detect_resource_category("TD"), "td")
+        self.assertEqual(detect_resource_category("Examens"), "exam")
+        self.assertEqual(detect_resource_category("محاضرات"), "course")
+        self.assertEqual(detect_resource_category("اختبارات"), "exam")
+        self.assertEqual(detect_resource_category("Other"), "other")
 
     def test_public_academic_endpoint_returns_nested_sections(self):
         from .models import Folder
@@ -86,4 +98,4 @@ class AcademicCatalogueTests(APITestCase):
         response = self.client.get("/api/academic/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data[0]["name"], "Informatique")
-        self.assertEqual(response.data[0]["levels"][0]["name"], "L1")
+        self.assertEqual(response.data[0]["filieres"][0]["name"], "L1")

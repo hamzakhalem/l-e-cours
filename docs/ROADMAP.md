@@ -1,6 +1,6 @@
 # L-E-COURS Roadmap
 
-## v1.5 — Student Reading Workspace (current)
+## v1.5 — Student Reading Workspace (stable)
 - In-app PDF reading for uploaded PDF resources using the browser PDF renderer.
 - Breadcrumb navigation through the folder hierarchy.
 - Recently opened files stored on the current device.
@@ -8,7 +8,15 @@
 - Favourites and quick navigation to recent files.
 - Responsive reader and note editor for desktop and mobile screens.
 
-## v1.6 — Discovery and Operations
+## v1.6 — Five-Level Academic Catalogue (implementation in progress)
+- StudyYear → Filiere → Speciality → Subject → ResourceCategory.
+- Standard Cours, TD, Examens and Autres categories.
+- Admin CRUD, manual correction and ordering of academic levels.
+- Public unauthenticated browsing and category-based file access.
+- Drive import depth mapping and multilingual category detection.
+- Preserve v1.5 PDF reader, favourites, notes and recently viewed resources.
+
+## Later — Discovery and Operations
 - PDF text extraction and full-text indexing.
 - Advanced filters by academic year, file type, subject and resource category.
 - Bulk upload and duplicate review workflow.

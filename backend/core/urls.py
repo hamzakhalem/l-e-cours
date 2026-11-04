@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .views import SourceViewSet, FolderViewSet, FileViewSet, dashboard, search, add_drive_source, sync_drive, academic_structure
+from .views import SourceViewSet, FolderViewSet, FileViewSet, StudyYearViewSet, FiliereViewSet, SpecialityViewSet, SubjectViewSet, ResourceCategoryViewSet, dashboard, search, add_drive_source, sync_drive, academic_structure
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -26,6 +26,11 @@ router = DefaultRouter()
 router.register("sources", SourceViewSet, basename="source")
 router.register("folders", FolderViewSet, basename="folder")
 router.register("files", FileViewSet, basename="file")
+router.register("admin/study-years", StudyYearViewSet, basename="admin-study-year")
+router.register("admin/filieres", FiliereViewSet, basename="admin-filiere")
+router.register("admin/specialities", SpecialityViewSet, basename="admin-speciality")
+router.register("admin/subjects", SubjectViewSet, basename="admin-subject")
+router.register("admin/resource-categories", ResourceCategoryViewSet, basename="admin-resource-category")
 
 urlpatterns = [
     path("auth/token/", ThrottledTokenAuthView.as_view(), name="api-token-auth"),

@@ -48,6 +48,7 @@ class File(models.Model):
 
     source = models.ForeignKey(DriveSource, on_delete=models.CASCADE, related_name="files")
     folder = models.ForeignKey(Folder, null=True, blank=True, on_delete=models.SET_NULL, related_name="files")
+    resource_category = models.ForeignKey("ResourceCategory", null=True, blank=True, on_delete=models.SET_NULL, related_name="files")
     name = models.CharField(max_length=255, db_index=True)
     mime_type = models.CharField(max_length=150, blank=True)
     kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.OTHER)
@@ -83,9 +84,25 @@ class AuditLog(models.Model):
         return f"{self.action} ({self.object_type}:{self.object_id})"
 
 
+class StudyYear(models.Model):
+    """First academic level (e.g. Licence 3 or Master 1)."""
+    source = models.ForeignKey(DriveSource, on_delete=models.CASCADE, related_name="study_years")
+    folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="study_year_entry")
+    name = models.CharField(max_length=255)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_public = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "سنة دراسية"
+        verbose_name_plural = "السنوات الدراسية"
+
+    def __str__(self):
+        return self.name
+
+
 class Filiere(models.Model):
-    """Top-level academic section mapped to a root Drive folder."""
-    source = models.ForeignKey(DriveSource, on_delete=models.CASCADE, related_name="filieres")
+    study_year = models.ForeignKey(StudyYear, on_delete=models.CASCADE, related_name="filieres")
     folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="filiere_entry")
     name = models.CharField(max_length=255)
     sort_order = models.PositiveIntegerField(default=0)
@@ -100,27 +117,29 @@ class Filiere(models.Model):
         return self.name
 
 
-class StudyLevel(models.Model):
-    filiere = models.ForeignKey(Filiere, on_delete=models.CASCADE, related_name="levels")
-    folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="level_entry")
+class Speciality(models.Model):
+    filiere = models.ForeignKey(Filiere, on_delete=models.CASCADE, related_name="specialities")
+    folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="speciality_entry")
     name = models.CharField(max_length=255)
+    code = models.CharField(max_length=40, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     is_public = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["sort_order", "name"]
-        verbose_name = "مستوى"
-        verbose_name_plural = "المستويات"
+        verbose_name = "تخصص"
+        verbose_name_plural = "التخصصات"
 
     def __str__(self):
         return self.name
 
 
 class Subject(models.Model):
-    level = models.ForeignKey(StudyLevel, on_delete=models.CASCADE, related_name="subjects")
+    speciality = models.ForeignKey(Speciality, on_delete=models.CASCADE, related_name="subjects")
     folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="subject_entry")
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=40, blank=True)
+    description = models.TextField(blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     is_public = models.BooleanField(default=True)
 
@@ -133,18 +152,26 @@ class Subject(models.Model):
         return self.name
 
 
-class Course(models.Model):
-    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="courses")
-    folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="course_entry")
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
+class ResourceCategory(models.Model):
+    class Code(models.TextChoices):
+        COURSE = "course", "Cours"
+        TD = "td", "TD"
+        EXAM = "exam", "Examens"
+        OTHER = "other", "Autres"
+
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="resource_categories")
+    folder = models.OneToOneField(Folder, on_delete=models.CASCADE, related_name="resource_category_entry", null=True, blank=True)
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=20, choices=Code.choices, default=Code.OTHER)
     sort_order = models.PositiveIntegerField(default=0)
     is_public = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["sort_order", "name"]
-        verbose_name = "درس"
-        verbose_name_plural = "الدروس"
+        verbose_name = "صنف مورد"
+        verbose_name_plural = "أصناف الموارد"
+        constraints = [models.UniqueConstraint(fields=["subject", "code"], name="uniq_subject_resource_category")]
 
     def __str__(self):
-        return self.name
+        return f"{self.subject.name} / {self.name}"
+

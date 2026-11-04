@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DriveSource, Folder, File, AuditLog, Filiere, StudyLevel, Subject, Course
+from .models import DriveSource, Folder, File, AuditLog, StudyYear, Filiere, Speciality, Subject, ResourceCategory
 
 @admin.register(DriveSource)
 class DriveSourceAdmin(admin.ModelAdmin):
@@ -14,8 +14,8 @@ class FolderAdmin(admin.ModelAdmin):
 
 @admin.register(File)
 class FileAdmin(admin.ModelAdmin):
-    list_display = ("name", "source", "folder", "kind", "size_bytes", "modified_at")
-    list_filter = ("source", "kind")
+    list_display = ("name", "source", "folder", "resource_category", "kind", "size_bytes", "modified_at")
+    list_filter = ("source", "kind", "resource_category")
     search_fields = ("name", "mime_type")
 
 @admin.register(AuditLog)
@@ -23,27 +23,37 @@ class AuditLogAdmin(admin.ModelAdmin):
     list_display = ("action", "object_type", "object_id", "created_at")
     list_filter = ("action",)
 
-
-@admin.register(Filiere)
-class FiliereAdmin(admin.ModelAdmin):
+@admin.register(StudyYear)
+class StudyYearAdmin(admin.ModelAdmin):
     list_display = ("name", "source", "is_public", "sort_order")
+    list_editable = ("sort_order", "is_public")
     list_filter = ("source", "is_public")
     search_fields = ("name",)
 
-@admin.register(StudyLevel)
-class StudyLevelAdmin(admin.ModelAdmin):
-    list_display = ("name", "filiere", "is_public", "sort_order")
+@admin.register(Filiere)
+class FiliereAdmin(admin.ModelAdmin):
+    list_display = ("name", "study_year", "is_public", "sort_order")
+    list_editable = ("sort_order", "is_public")
+    list_filter = ("study_year", "is_public")
+    search_fields = ("name",)
+
+@admin.register(Speciality)
+class SpecialityAdmin(admin.ModelAdmin):
+    list_display = ("name", "filiere", "code", "is_public", "sort_order")
+    list_editable = ("sort_order", "is_public")
     list_filter = ("filiere", "is_public")
-    search_fields = ("name", "filiere__name")
+    search_fields = ("name",)
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "level", "code", "is_public", "sort_order")
-    list_filter = ("level__filiere", "is_public")
+    list_display = ("name", "speciality", "code", "is_public", "sort_order")
+    list_editable = ("sort_order", "is_public")
+    list_filter = ("speciality__filiere__study_year", "is_public")
     search_fields = ("name", "code")
 
-@admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
-    list_display = ("name", "subject", "is_public", "sort_order")
-    list_filter = ("subject__level__filiere", "is_public")
-    search_fields = ("name", "description")
+@admin.register(ResourceCategory)
+class ResourceCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "subject", "is_public", "sort_order")
+    list_editable = ("sort_order", "is_public")
+    list_filter = ("code", "is_public")
+    search_fields = ("name", "subject__name")

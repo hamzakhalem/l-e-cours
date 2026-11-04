@@ -10,7 +10,7 @@ from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone as django_timezone
 
-from .models import DriveSource, Folder, File, Filiere, StudyLevel, Subject, Course
+from .models import DriveSource, Folder, File, StudyYear, Filiere, Speciality, Subject, ResourceCategory
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
 GOOGLE_NATIVE_PREFIX = "application/vnd.google-apps."
@@ -146,23 +146,61 @@ def sync_drive_source(source: DriveSource) -> dict:
     return counters
 
 
+def detect_resource_category(name: str) -> str:
+    value = " ".join((name or "").strip().lower().replace("_", " ").replace("-", " ").split())
+    aliases = {
+        "course": {"course", "courses", "cours", "lecture", "lectures", "محاضرات", "دروس", "درس"},
+        "td": {"td", "t.d", "tutorial", "tutorials", "travaux diriges", "تمارين", "اعمال موجهة", "الأعمال الموجهة"},
+        "exam": {"exam", "exams", "examen", "examens", "اختبار", "اختبارات", "امتحان", "امتحانات"},
+        "other": {"other", "others", "autre", "autres", "أخرى", "اخرى", "متفرقات"},
+    }
+    for code, names in aliases.items():
+        if value in names:
+            return code
+    return "other"
+
+
 def rebuild_academic_structure(source: DriveSource) -> None:
-    """Map Drive folder depth to Filiere → Level → Subject → Course."""
+    """Map Drive depths: StudyYear → Filiere → Speciality → Subject → ResourceCategory."""
     folders = list(Folder.objects.filter(source=source).select_related("parent").order_by("id"))
     by_id = {folder.id: folder for folder in folders}
-    filieres, levels, subjects = {}, {}, {}
+    years, filieres, specialities, subjects = {}, {}, {}, {}
+    category_labels = {"course": "Cours", "td": "TD", "exam": "Examens", "other": "Autres"}
     for folder in folders:
         parent = by_id.get(folder.parent_id) if folder.parent_id else None
-        grandparent = by_id.get(parent.parent_id) if parent and parent.parent_id else None
-        greatgrandparent = by_id.get(grandparent.parent_id) if grandparent and grandparent.parent_id else None
         if parent is None:
-            entry, _ = Filiere.objects.update_or_create(folder=folder, defaults={"source": source, "name": folder.name})
+            entry, _ = StudyYear.objects.update_or_create(
+                folder=folder, defaults={"source": source, "name": folder.name})
+            years[folder.id] = entry
+        elif parent.id in years:
+            entry, _ = Filiere.objects.update_or_create(
+                folder=folder, defaults={"study_year": years[parent.id], "name": folder.name})
             filieres[folder.id] = entry
         elif parent.id in filieres:
-            entry, _ = StudyLevel.objects.update_or_create(folder=folder, defaults={"filiere": filieres[parent.id], "name": folder.name})
-            levels[folder.id] = entry
-        elif parent.id in levels:
-            entry, _ = Subject.objects.update_or_create(folder=folder, defaults={"level": levels[parent.id], "name": folder.name})
+            entry, _ = Speciality.objects.update_or_create(
+                folder=folder, defaults={"filiere": filieres[parent.id], "name": folder.name})
+            specialities[folder.id] = entry
+        elif parent.id in specialities:
+            entry, _ = Subject.objects.update_or_create(
+                folder=folder, defaults={"speciality": specialities[parent.id], "name": folder.name})
             subjects[folder.id] = entry
         elif parent.id in subjects:
-            Course.objects.update_or_create(folder=folder, defaults={"subject": subjects[parent.id], "name": folder.name})
+            subject = subjects[parent.id]
+            code = detect_resource_category(folder.name)
+            category, _ = ResourceCategory.objects.get_or_create(
+                subject=subject, code=code,
+                defaults={"name": category_labels[code], "folder": folder,
+                          "sort_order": list(category_labels).index(code)})
+            if category.folder_id is None:
+                category.folder = folder
+                category.save(update_fields=["folder"])
+            File.objects.filter(folder=folder, resource_category__isnull=True).update(resource_category=category)
+
+    # Every subject has the four standard categories, even when Drive has no matching folder.
+    for subject in subjects.values():
+        for index, (code, label) in enumerate(category_labels.items()):
+            category, _ = ResourceCategory.objects.get_or_create(
+                subject=subject, code=code,
+                defaults={"name": label, "sort_order": index})
+        other = ResourceCategory.objects.get(subject=subject, code="other")
+        File.objects.filter(folder=subject.folder, resource_category__isnull=True).update(resource_category=other)

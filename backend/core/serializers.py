@@ -24,7 +24,7 @@ class FileSerializer(serializers.ModelSerializer):
     class Meta:
         model = File
         fields = ["id", "source", "source_name", "folder", "folder_name", "name", "mime_type",
-                  "kind", "size_bytes", "size_display", "external_id", "web_url", "modified_at", "created_at", "sha256", "has_upload"]
+                  "kind", "resource_category", "size_bytes", "size_display", "external_id", "web_url", "modified_at", "created_at", "sha256", "has_upload"]
         read_only_fields = fields
     def get_size_display(self, obj):
         size = float(obj.size_bytes or 0)
@@ -34,3 +34,34 @@ class FileSerializer(serializers.ModelSerializer):
             size /= 1024
     def get_has_upload(self, obj):
         return bool(obj.uploaded_file)
+
+from .models import StudyYear, Filiere, Speciality, Subject, ResourceCategory
+
+class ResourceCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResourceCategory
+        fields = ["id", "subject", "folder", "name", "code", "sort_order", "is_public"]
+
+class SubjectSerializer(serializers.ModelSerializer):
+    resource_categories = ResourceCategorySerializer(many=True, read_only=True)
+    class Meta:
+        model = Subject
+        fields = ["id", "speciality", "folder", "name", "code", "description", "sort_order", "is_public", "resource_categories"]
+
+class SpecialitySerializer(serializers.ModelSerializer):
+    subjects = SubjectSerializer(many=True, read_only=True)
+    class Meta:
+        model = Speciality
+        fields = ["id", "filiere", "folder", "name", "code", "sort_order", "is_public", "subjects"]
+
+class FiliereSerializer(serializers.ModelSerializer):
+    specialities = SpecialitySerializer(many=True, read_only=True)
+    class Meta:
+        model = Filiere
+        fields = ["id", "study_year", "folder", "name", "sort_order", "is_public", "specialities"]
+
+class StudyYearSerializer(serializers.ModelSerializer):
+    filieres = FiliereSerializer(many=True, read_only=True)
+    class Meta:
+        model = StudyYear
+        fields = ["id", "source", "folder", "name", "sort_order", "is_public", "filieres"]

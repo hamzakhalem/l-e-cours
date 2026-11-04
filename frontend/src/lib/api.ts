@@ -1,8 +1,9 @@
 const API = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api'
 const TOKEN_KEY = 'le_cours_token'
-export type Source = { id: number; name: string; label: string; color: string; folder_count: number; file_count: number }
+export const adminUrl = `${API.replace(/\/api\/?$/, '')}/admin/`
+export type Source = { id: number; name: string; label: string; color: string; is_active: boolean; is_public: boolean; drive_url: string; sync_status: string; sync_error: string; last_synced_at: string | null; folder_count: number; file_count: number }
 export type Folder = { id: number; source: number; source_name: string; name: string; parent: number | null; children_count: number; files_count: number }
-export type FileRecord = { id: number; source: number; source_name: string; folder: number | null; folder_name: string; name: string; kind: string; mime_type: string; size_bytes: number; size_display: string; modified_at: string | null; web_url: string; has_upload?: boolean; sha256?: string }
+export type FileRecord = { id: number; source: number; source_name: string; folder: number | null; folder_name: string; resource_category?: number | null; name: string; kind: string; mime_type: string; size_bytes: number; size_display: string; modified_at: string | null; web_url: string; has_upload?: boolean; sha256?: string }
 export const getToken = () => localStorage.getItem(TOKEN_KEY)
 export const setToken = (token: string | null) => token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY)
 
@@ -52,11 +53,12 @@ export const api = {
   downloadUrl: (id: number) => `${API}/files/${id}/download/`,
 }
 
-export async function uploadFile(file: File, source: number, folder?: number): Promise<FileRecord> {
+export async function uploadFile(file: File, source: number, folder?: number, resourceCategory?: number): Promise<FileRecord> {
   const form = new FormData()
   form.append('file', file)
   form.append('source', String(source))
   if (folder) form.append('folder', String(folder))
+  if (resourceCategory) form.append('resource_category', String(resourceCategory))
   return request<FileRecord>('/files/upload/', { method: 'POST', body: form })
 }
 

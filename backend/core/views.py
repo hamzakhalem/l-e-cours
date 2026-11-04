@@ -12,8 +12,8 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.views import APIView
 
-from .models import DriveSource, Folder, File, AuditLog, Filiere
-from .serializers import DriveSourceSerializer, FolderSerializer, FileSerializer
+from .models import DriveSource, Folder, File, AuditLog, StudyYear, Filiere, Speciality, Subject, ResourceCategory
+from .serializers import DriveSourceSerializer, FolderSerializer, FileSerializer, StudyYearSerializer, FiliereSerializer, SpecialitySerializer, SubjectSerializer, ResourceCategorySerializer
 
 
 class SourceViewSet(viewsets.ReadOnlyModelViewSet):
@@ -52,7 +52,7 @@ class FileViewSet(viewsets.ReadOnlyModelViewSet):
             return [IsAuthenticated()]
         return [AllowAny()]
     serializer_class = FileSerializer
-    queryset = File.objects.filter(source__is_active=True, source__is_public=True).select_related("source", "folder").all()
+    queryset = File.objects.filter(source__is_active=True, source__is_public=True).select_related("source", "folder", "resource_category").all()
     search_fields = ["name", "mime_type"]
     ordering_fields = ["name", "size_bytes", "modified_at", "created_at"]
 
@@ -108,8 +108,19 @@ class FileViewSet(viewsets.ReadOnlyModelViewSet):
         for chunk in uploaded.chunks():
             digest.update(chunk)
         uploaded.seek(0)
+        category = None
+        category_id = request.data.get("resource_category")
+        if category_id:
+            try:
+                category = ResourceCategory.objects.get(pk=category_id, subject__speciality__filiere__study_year__source=source)
+            except (ResourceCategory.DoesNotExist, TypeError, ValueError):
+                return Response({"detail": "صنف الموارد غير صالح لهذا المصدر."}, status=400)
+        elif folder:
+            category = ResourceCategory.objects.filter(folder=folder).first()
+            if category is None:
+                category = ResourceCategory.objects.filter(subject__folder=folder, code=ResourceCategory.Code.OTHER).first()
         record = File.objects.create(
-            source=source, folder=folder, name=safe_name,
+            source=source, folder=folder, resource_category=category, name=safe_name,
             mime_type=uploaded.content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream",
             kind=kind_map.get(ext, "other"), size_bytes=uploaded.size, sha256=digest.hexdigest(),
             uploaded_file=uploaded, uploaded_by=request.user,
@@ -149,7 +160,7 @@ def search(request):
     q = request.query_params.get("q", "").strip()
     source = request.query_params.get("source")
     kind = request.query_params.get("kind")
-    files = File.objects.filter(source__is_active=True, source__is_public=True).select_related("source", "folder").all()
+    files = File.objects.filter(source__is_active=True, source__is_public=True).select_related("source", "folder", "resource_category").all()
     if q:
         files = files.filter(Q(name__icontains=q) | Q(mime_type__icontains=q))
     if source:
@@ -203,20 +214,58 @@ def sync_drive(request, source_id):
     return Response({"source": DriveSourceSerializer(source).data, "imported": counts})
 
 
+class AcademicAdminMixin:
+    permission_classes = [IsAdminUser]
+
+
+class StudyYearViewSet(AcademicAdminMixin, viewsets.ModelViewSet):
+    queryset = StudyYear.objects.select_related("source", "folder").all()
+    serializer_class = StudyYearSerializer
+
+
+class FiliereViewSet(AcademicAdminMixin, viewsets.ModelViewSet):
+    queryset = Filiere.objects.select_related("study_year", "folder").all()
+    serializer_class = FiliereSerializer
+
+
+class SpecialityViewSet(AcademicAdminMixin, viewsets.ModelViewSet):
+    queryset = Speciality.objects.select_related("filiere", "folder").all()
+    serializer_class = SpecialitySerializer
+
+
+class SubjectViewSet(AcademicAdminMixin, viewsets.ModelViewSet):
+    queryset = Subject.objects.select_related("speciality", "folder").all()
+    serializer_class = SubjectSerializer
+
+
+class ResourceCategoryViewSet(AcademicAdminMixin, viewsets.ModelViewSet):
+    queryset = ResourceCategory.objects.select_related("subject", "folder").all()
+    serializer_class = ResourceCategorySerializer
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def academic_structure(request):
-    """Public nested catalogue generated from Drive folder hierarchy."""
+    """Public five-level academic catalogue with resources grouped by category."""
+    years = StudyYear.objects.filter(is_public=True, source__is_active=True, source__is_public=True).select_related("source").prefetch_related(
+        "filieres__specialities__subjects__resource_categories__files")
     result = []
-    filieres = Filiere.objects.filter(is_public=True, source__is_active=True, source__is_public=True).select_related("folder", "source").prefetch_related("levels__subjects__courses__folder")
-    for filiere in filieres:
-        levels_data = []
-        for level in filiere.levels.filter(is_public=True).select_related("folder"):
-            subjects_data = []
-            for subject in level.subjects.filter(is_public=True).select_related("folder").prefetch_related("courses__folder"):
-                courses_data = [{"id": c.id, "name": c.name, "folder_id": c.folder_id, "description": c.description}
-                                for c in subject.courses.filter(is_public=True)]
-                subjects_data.append({"id": subject.id, "name": subject.name, "code": subject.code, "folder_id": subject.folder_id, "courses": courses_data})
-            levels_data.append({"id": level.id, "name": level.name, "folder_id": level.folder_id, "subjects": subjects_data})
-        result.append({"id": filiere.id, "name": filiere.name, "source_id": filiere.source_id, "folder_id": filiere.folder_id, "levels": levels_data})
+    for year in years:
+        year_data = {"id": year.id, "name": year.name, "source_id": year.source_id, "filieres": []}
+        for filiere in year.filieres.filter(is_public=True):
+            filiere_data = {"id": filiere.id, "name": filiere.name, "specialities": []}
+            for speciality in filiere.specialities.filter(is_public=True):
+                speciality_data = {"id": speciality.id, "name": speciality.name, "subjects": []}
+                for subject in speciality.subjects.filter(is_public=True):
+                    subject_data = {"id": subject.id, "name": subject.name, "code": subject.code, "resource_categories": []}
+                    categories = subject.resource_categories.filter(is_public=True).order_by("sort_order", "name")
+                    for category in categories:
+                        category_data = {"id": category.id, "name": category.name, "code": category.code, "files": []}
+                        qs = File.objects.filter(source__is_active=True, source__is_public=True, resource_category=category).select_related("source", "folder").order_by("name")
+                        category_data["files"] = FileSerializer(qs, many=True, context={"request": request}).data
+                        subject_data["resource_categories"].append(category_data)
+                    speciality_data["subjects"].append(subject_data)
+                filiere_data["specialities"].append(speciality_data)
+            year_data["filieres"].append(filiere_data)
+        result.append(year_data)
     return Response(result)
