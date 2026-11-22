@@ -6,3 +6,9 @@ node_modules/
 dist/
 .DS_Store
 *.sqlite3
+
+# Uploaded and imported files (user content, never commit)
+backend/media/
+
+# TypeScript build cache
+*.tsbuildinfo

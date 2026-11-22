@@ -222,7 +222,7 @@ Use the SSL requirements of your provider and keep credentials outside source co
 
 ### Local file storage
 
-By default, uploaded/imported files are stored under `backend/media/`. This is suitable for local development only unless the host provides persistent disk storage and backups.
+By default, uploaded/imported files are stored under `backend/media/`. This is suitable for local development only unless the host provides persistent disk storage and backups. The folder is ignored by git, so uploaded files are never committed.
 
 ### S3-compatible storage (including Supabase Storage)
 
